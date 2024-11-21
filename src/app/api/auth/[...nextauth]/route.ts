@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { User } from "@/models/User";
 import connectDB from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
+import logger from "@/utils/logger";
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -14,27 +15,32 @@ export const authOptions: AuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('Invalid credentials');
+        try {
+          if (!credentials?.email || !credentials?.password) {
+            throw new Error('Invalid credentials');
+          }
+
+          await connectDB();
+
+          const user = await User.findOne({ email: credentials.email });
+          if (!user) {
+            throw new Error('User not found');
+          }
+
+          const isValid = await bcrypt.compare(credentials.password, user.password);
+          if (!isValid) {
+            throw new Error('Invalid password');
+          }
+
+          return {
+            id: user._id.toString(),
+            email: user.email,
+            name: user.name
+          };
+        } catch (error) {
+          logger.error('Authentication error:', error);
+          throw new Error('Authentication failed');
         }
-
-        await connectDB();
-
-        const user = await User.findOne({ email: credentials.email });
-        if (!user) {
-          throw new Error('User not found');
-        }
-
-        const isValid = await bcrypt.compare(credentials.password, user.password);
-        if (!isValid) {
-          throw new Error('Invalid password');
-        }
-
-        return {
-          id: user._id.toString(),
-          email: user.email,
-          name: user.name
-        };
       }
     })
   ],

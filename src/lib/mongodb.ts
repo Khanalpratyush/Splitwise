@@ -4,7 +4,9 @@ import logger from '@/utils/logger';
 const MONGODB_URI = process.env.MONGODB_URI!;
 
 if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable inside .env');
+  throw new Error(
+    'Please define the MONGODB_URI environment variable inside .env.local'
+  );
 }
 
 interface GlobalWithMongoose {
@@ -22,36 +24,32 @@ if (!cached) {
   cached = global.mongoose = { conn: null, promise: null };
 }
 
-async function connectDB() {
-  if (cached.conn) {
-    return cached.conn;
-  }
+const opts = {
+  bufferCommands: false,
+  serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+};
 
-  if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    };
-
-    logger.info('Creating new database connection');
-    cached.promise = mongoose.connect(MONGODB_URI, opts)
-      .then((mongoose) => {
-        logger.info('Successfully connected to MongoDB');
-        return mongoose;
-      })
-      .catch((error) => {
-        logger.error('Error connecting to MongoDB', error);
-        throw error;
-      });
-  }
-
+async function connectDB(retries = 5) {
   try {
-    cached.conn = await cached.promise;
-  } catch (error) {
-    cached.promise = null;
-    throw error;
-  }
+    if (cached.conn) {
+      return cached.conn;
+    }
 
-  return cached.conn;
+    if (!cached.promise) {
+      cached.promise = mongoose.connect(MONGODB_URI, opts);
+    }
+    cached.conn = await cached.promise;
+    return cached.conn;
+  } catch (e) {
+    if (retries > 0) {
+      console.log(`MongoDB connection failed, retrying... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return connectDB(retries - 1);
+    }
+    throw e;
+  }
 }
 
 export default connectDB; 
