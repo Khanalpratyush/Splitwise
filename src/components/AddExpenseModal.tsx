@@ -100,51 +100,21 @@ export default function AddExpenseModal({
     });
   };
 
-  const calculateSplits = () => {
-    if (!amount || selectedFriends.length === 0) return;
-
-    const totalAmount = parseFloat(amount);
-    if (isNaN(totalAmount)) return;
-
-    const numPeople = selectedFriends.length;
-
-    switch (splitType) {
-      case 'equal':
-        const equalShare = totalAmount / numPeople;
-        setSplits(selectedFriends.map(friend => ({
-          userId: friend._id,
-          amount: equalShare,
-          percentage: 100 / numPeople
-        })));
-        break;
-
-      case 'percentage':
-        const defaultPercentage = 100 / numPeople;
-        setSplits(selectedFriends.map(friend => ({
-          userId: friend._id,
-          amount: (totalAmount * defaultPercentage) / 100,
-          percentage: defaultPercentage
-        })));
-        break;
-
-      case 'exact':
-        setSplits(selectedFriends.map(friend => {
-          const existingSplit = splits.find(s => s.userId === friend._id);
-          return existingSplit || {
-            userId: friend._id,
-            amount: totalAmount / numPeople,
-            percentage: 100 / numPeople
-          };
-        }));
-        break;
+  const calculateSplits = useCallback(() => {
+    if (splitType === 'equal') {
+      const splitAmount = amount / (selectedFriends.length + 1);
+      setSplits(selectedFriends.map(friend => ({
+        userId: friend._id,
+        amount: splitAmount,
+      })));
     }
-  };
+  }, [amount, selectedFriends, splitType, splits]);
 
   useEffect(() => {
     if (splitType === 'equal' || splitType === 'percentage') {
       calculateSplits();
     }
-  }, [splitType, amount, selectedFriends.length]);
+  }, [splitType, selectedFriends.length, calculateSplits]);
 
   const clearForm = useCallback(() => {
     setDescription('');

@@ -222,7 +222,7 @@ function FriendCard({ friend }: { friend: Friend }) {
   );
 }
 
-function PotentialFriendCard({ user, onAdd }: { user: Friend; onAdd: () => void }) {
+function _PotentialFriendCard({ user, onAdd }: { user: Friend; onAdd: () => void }) {
   const initials = user?.name ? user.name[0] : '?';
 
   return (

@@ -3,9 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Upload, AlertCircle, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
 import Papa from 'papaparse';
-import { User, Group, ExpenseCategory, ExpenseType, CATEGORIES } from '@/types';
+import { User, Group, ExpenseCategory, ExpenseType } from '@/types';
 import logger from '@/utils/logger';
-import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import { useSession } from 'next-auth/react';
 
 interface ExpenseCSVImportProps {
@@ -19,10 +18,8 @@ interface ExpenseCSVImportProps {
 interface CSVExpense {
   description: string;
   amount: string;
-  category?: ExpenseCategory;
-  type?: ExpenseType;
-  splitWith?: string; // Comma-separated emails
-  group?: string; // Group name
+  category?: string;
+  splitWith?: string;
   date?: string;
 }
 
@@ -31,10 +28,9 @@ interface ValidationError {
   errors: string[];
 }
 
-const VALID_CATEGORIES: ExpenseCategory[] = ['food', 'transport', 'shopping', 'entertainment', 'utilities', 'rent', 'health', 'travel', 'education', 'other'];
-const VALID_TYPES: ExpenseType[] = ['split', 'solo'];
+const _VALID_TYPES: ExpenseType[] = ['split', 'solo'];
 
-const FriendCheckbox = ({ friend, selected, onToggle }: { 
+const _FriendCheckbox = ({ friend, selected, onToggle }: { 
   friend: User; 
   selected: boolean; 
   onToggle: (friend: User) => void;
@@ -76,6 +72,11 @@ const FriendCheckbox = ({ friend, selected, onToggle }: {
   );
 };
 
+interface ParsedData {
+  data: Record<string, string>[];
+  errors: Papa.ParseError[];
+}
+
 export default function ExpenseCSVImport({
   isOpen,
   onClose,
@@ -102,7 +103,7 @@ export default function ExpenseCSVImport({
   const [expenseType, setExpenseType] = useState<'split' | 'solo'>('split');
   const [splitType, setSplitType] = useState<'equal' | 'percentage' | 'exact'>('equal');
   const [splits, setSplits] = useState<{ userId: string; amount: number; percentage: number }[]>([]);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [_showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   const currentExpense = expenses[currentExpenseIndex];
 
@@ -156,7 +157,7 @@ export default function ExpenseCSVImport({
     }
   }, [currentExpense, friends]);
 
-  const calculateSplits = () => {
+  const calculateSplits = useCallback(() => {
     if (!editedExpense.amount || selectedFriends.length === 0) return;
 
     const totalAmount = parseFloat(editedExpense.amount);
@@ -195,15 +196,15 @@ export default function ExpenseCSVImport({
         }));
         break;
     }
-  };
+  }, [amount, selectedFriends, splitType, splits]);
 
   useEffect(() => {
     if (splitType === 'equal' || splitType === 'percentage') {
       calculateSplits();
     }
-  }, [splitType, editedExpense.amount, selectedFriends.length]);
+  }, [splitType, amount, selectedFriends.length, calculateSplits]);
 
-  const validateExpense = (expense: any, rowIndex: number): ValidationError | null => {
+  const validateExpense = (expense: CSVExpense, rowIndex: number): ValidationError | null => {
     const errors: string[] = [];
 
     // Only validate required fields: description and amount
@@ -223,103 +224,68 @@ export default function ExpenseCSVImport({
     return errors.length > 0 ? { row: rowIndex + 1, errors } : null;
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFileUpload = (data: ParsedData) => {
+    const { data: parsedData, errors } = data;
 
-    setError(null);
-    setValidationErrors([]);
+    if (errors.length > 0) {
+      setError('Error parsing CSV file: ' + errors.map(e => e.message).join(', '));
+      return;
+    }
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (header: string) => {
-        const normalizedHeader = header.toLowerCase().trim();
-        
-        // Updated header mapping to include date variations
-        const headerMap: { [key: string]: string } = {
-          'desc': 'description',
-          'title': 'description',
-          'name': 'description',
-          'cost': 'amount',
-          'price': 'amount',
-          'value': 'amount',
-          'transaction date': 'date',
-          'transactiondate': 'date',
-          'date': 'date',
-          'trans date': 'date',
-          'trans_date': 'date',
-          'transaction_date': 'date'
-        };
+    const validationErrors: ValidationError[] = [];
+    const validExpenses: CSVExpense[] = [];
 
-        return headerMap[normalizedHeader] || normalizedHeader;
-      },
-      complete: (results) => {
-        if (results.errors.length > 0) {
-          setError('Error parsing CSV file: ' + results.errors.map(e => e.message).join(', '));
-          return;
+    parsedData.forEach((row: any, index: number) => {
+      const normalizedRow = Object.keys(row).reduce((acc: any, key) => {
+        acc[key.toLowerCase()] = row[key];
+        return acc;
+      }, {});
+
+      // Parse and validate the date
+      let expenseDate = new Date().toISOString().split('T')[0]; // Default to today
+      if (normalizedRow.date) {
+        const parsedDate = new Date(normalizedRow.date);
+        if (!isNaN(parsedDate.getTime())) {
+          expenseDate = parsedDate.toISOString().split('T')[0];
         }
+      }
 
-        const validationErrors: ValidationError[] = [];
-        const validExpenses: CSVExpense[] = [];
+      // Only process required fields, set defaults for others
+      const expense: CSVExpense = {
+        description: normalizedRow.description?.trim() || '',
+        amount: normalizedRow.amount?.toString().trim() || '',
+        category: 'other', // Default category
+        type: 'split',    // Default type
+        splitWith: '',    // Empty by default
+        group: '',        // Empty by default
+        date: expenseDate // Use parsed date or default
+      };
 
-        results.data.forEach((row: any, index: number) => {
-          const normalizedRow = Object.keys(row).reduce((acc: any, key) => {
-            acc[key.toLowerCase()] = row[key];
-            return acc;
-          }, {});
-
-          // Parse and validate the date
-          let expenseDate = new Date().toISOString().split('T')[0]; // Default to today
-          if (normalizedRow.date) {
-            const parsedDate = new Date(normalizedRow.date);
-            if (!isNaN(parsedDate.getTime())) {
-              expenseDate = parsedDate.toISOString().split('T')[0];
-            }
-          }
-
-          // Only process required fields, set defaults for others
-          const expense: CSVExpense = {
-            description: normalizedRow.description?.trim() || '',
-            amount: normalizedRow.amount?.toString().trim() || '',
-            category: 'other', // Default category
-            type: 'split',    // Default type
-            splitWith: '',    // Empty by default
-            group: '',        // Empty by default
-            date: expenseDate // Use parsed date or default
-          };
-
-          const validationError = validateExpense(expense, index);
-          if (validationError) {
-            validationErrors.push(validationError);
-          } else {
-            validExpenses.push(expense);
-          }
-        });
-
-        if (validationErrors.length > 0) {
-          setValidationErrors(validationErrors);
-          setError('Some expenses contain errors. Please check the details below.');
-          return;
-        }
-
-        if (validExpenses.length === 0) {
-          setError('No valid expenses found in the CSV file');
-          return;
-        }
-
-        logger.debug('Parsed expenses:', validExpenses);
-        setExpenses(validExpenses);
-        setStep(1);
-      },
-      error: (error) => {
-        logger.error('CSV parsing error', error);
-        setError('Failed to read CSV file: ' + error.message);
+      const validationError = validateExpense(expense, index);
+      if (validationError) {
+        validationErrors.push(validationError);
+      } else {
+        validExpenses.push(expense);
       }
     });
+
+    if (validationErrors.length > 0) {
+      setValidationErrors(validationErrors);
+      setError('Some expenses contain errors. Please check the details below.');
+      return;
+    }
+
+    if (validExpenses.length === 0) {
+      setError('No valid expenses found in the CSV file');
+      return;
+    }
+
+    logger.debug('Parsed expenses:', validExpenses);
+    setExpenses(validExpenses);
+    setStep(1);
   };
 
-  const validateSplits = (): boolean => {
+  const validateSplits = (splits: SplitData[]) => {
     if (!editedExpense.amount || selectedFriends.length === 0) return true;
     
     const totalAmount = parseFloat(editedExpense.amount);
@@ -375,7 +341,7 @@ export default function ExpenseCSVImport({
     setError(null);
   };
 
-  const handleExpenseSubmit = async (expense: any) => {
+  const handleExpenseSubmit = async (_expense: CSVExpense) => {
     setIsSubmitting(true);
     setError(null);
 

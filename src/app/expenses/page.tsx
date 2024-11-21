@@ -3,16 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSession } from 'next-auth/react';
-import { useModal } from '@/hooks/useModal';
 import { Trash2, CheckCircle, Plus, Upload } from 'lucide-react';
-import AddExpenseModal from '@/components/AddExpenseModal';
-import EditExpenseModal from '@/components/EditExpenseModal';
-import ExpenseDetailsModal from '@/components/ExpenseDetailsModal';
-import ExpenseCSVImport from '@/components/ExpenseCSVImport';
-import logger from '@/utils/logger';
-import type { Expense, Group, User, ExpenseLabelConfig } from '@/types';
-import { EXPENSE_LABELS } from '@/types';
-import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog';
+import type { Expense, Group, User } from '@/types';
 
 type ExpenseTab = 'created' | 'involved';
 type SortOption = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc';
@@ -21,6 +13,14 @@ type TimeFilter = 'all' | 'this-month' | 'last-month' | 'this-year' | 'custom';
 interface CustomDateRange {
   start: string;
   end: string;
+}
+
+interface Session {
+  user?: {
+    id: string;
+    name?: string;
+    email?: string;
+  };
 }
 
 export default function ExpensesPage() {
@@ -209,8 +209,15 @@ export default function ExpensesPage() {
   }, []);
   const closeImportModal = () => setIsImportModalOpen(false);
 
-  const openEditModal = () => setIsEditModalOpen(true);
-  const closeEditModal = () => setIsEditModalOpen(false);
+  const openEditModal = useCallback((expense: Expense) => {
+    setSelectedExpense(expense);
+    setIsEditModalOpen(true);
+  }, []);
+
+  const closeEditModal = useCallback(() => {
+    setIsEditModalOpen(false);
+    setSelectedExpense(null);
+  }, []);
 
   const openDetailsModal = () => setIsDetailsModalOpen(true);
   const closeDetailsModal = () => setIsDetailsModalOpen(false);
@@ -243,14 +250,14 @@ export default function ExpensesPage() {
   const handleEditExpense = useCallback((expense: Expense) => {
     if (expense.payerId._id === session?.user.id) {
       setSelectedExpense(expense);
-      openEditModal();
+      openEditModal(expense);
     }
   }, [session?.user.id, openEditModal]);
 
-  const handleViewDetails = (expense: Expense) => {
+  const handleViewDetails = useCallback((expense: Expense) => {
     setSelectedExpense(expense);
     openDetailsModal();
-  };
+  }, []);
 
   if (authLoading || (isLoading && expenses.length === 0)) {
     return (
@@ -475,10 +482,7 @@ export default function ExpensesPage() {
           <>
             <EditExpenseModal
               isOpen={isEditModalOpen}
-              onClose={() => {
-                setIsEditModalOpen(false);
-                setSelectedExpense(null);
-              }}
+              onClose={closeEditModal}
               expense={selectedExpense}
               friends={friends}
               groups={groups}
@@ -507,7 +511,7 @@ function ExpenseItem({
   onDelete
 }: { 
   expense: Expense;
-  session: any;
+  session: Session | null;
   onEdit: () => void;
   onDelete: () => void;
 }) {

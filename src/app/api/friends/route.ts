@@ -7,7 +7,7 @@ import connectDB from '@/lib/mongodb';
 import logger from '@/utils/logger';
 import type { NextRequest } from 'next/server';
 
-export async function GET(request: Request) {
+export async function GET(_request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     

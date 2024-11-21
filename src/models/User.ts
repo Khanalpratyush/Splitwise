@@ -13,7 +13,7 @@ export interface IUserMethods {
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
-export type UserModel = mongoose.Model<IUser, {}, IUserMethods>;
+export type UserModel = mongoose.Model<IUser, object, IUserMethods>;
 
 const userSchema = new Schema<IUser, UserModel, IUserMethods>({
   name: {

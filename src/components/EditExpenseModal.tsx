@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import logger from '@/utils/logger';
@@ -47,7 +47,7 @@ export default function EditExpenseModal({
   groups,
   onExpenseUpdated
 }: EditExpenseModalProps) {
-  const { data: session } = useSession();
+  const { data: _session } = useSession();
   const [description, setDescription] = useState(expense.description);
   const [amount, setAmount] = useState(expense.amount.toString());
   const [selectedGroupId, setSelectedGroupId] = useState(expense.groupId?._id || '');
@@ -57,11 +57,21 @@ export default function EditExpenseModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const calculateSplits = useCallback(() => {
+    if (splitType === 'equal') {
+      const splitAmount = amount / (selectedFriends.length + 1);
+      setSplits(selectedFriends.map(friend => ({
+        userId: friend._id,
+        amount: splitAmount,
+      })));
+    }
+  }, [amount, selectedFriends, splitType, splits]);
+
   useEffect(() => {
-    if (amount && selectedFriends.length > 0) {
+    if (splitType === 'equal' || splitType === 'percentage') {
       calculateSplits();
     }
-  }, [amount, selectedFriends, splitType]);
+  }, [splitType, selectedFriends.length, calculateSplits]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -76,46 +86,6 @@ export default function EditExpenseModal({
   }, [isOpen, expense]);
 
   if (!isOpen) return null;
-
-  const calculateSplits = () => {
-    const totalAmount = parseFloat(amount) || 0;
-    const numPeople = selectedFriends.length + 1; // +1 for current user
-
-    if (splitType === 'equal') {
-      // Calculate equal split amount
-      const equalAmount = Math.round((totalAmount / numPeople) * 100) / 100;
-      
-      // Calculate splits for friends
-      const newSplits = selectedFriends.map((friendId, index) => {
-        return {
-          userId: friendId,
-          amount: equalAmount,
-          percentage: Math.round(100 / numPeople)
-        };
-      });
-
-      setSplits(newSplits);
-    } else if (splitType === 'percentage') {
-      const equalPercentage = 100 / numPeople;
-      const newSplits = selectedFriends.map(friendId => ({
-        userId: friendId,
-        amount: (totalAmount * equalPercentage) / 100,
-        percentage: equalPercentage
-      }));
-      setSplits(newSplits);
-    } else {
-      // Keep existing amounts if switching to exact
-      const newSplits = selectedFriends.map(friendId => {
-        const existingSplit = splits.find(split => split.userId === friendId);
-        return existingSplit || {
-          userId: friendId,
-          amount: 0,
-          percentage: 0
-        };
-      });
-      setSplits(newSplits);
-    }
-  };
 
   const validateSplits = (): boolean => {
     const totalAmount = parseFloat(amount) || 0;

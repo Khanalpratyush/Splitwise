@@ -1,5 +1,5 @@
 import mongoose, { Schema, model, models } from 'mongoose';
-import type { ExpenseLabel } from '@/types';
+import type { _ExpenseLabel } from '@/types';
 
 const EXPENSE_LABELS = [
   'food',

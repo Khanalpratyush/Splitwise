@@ -36,14 +36,14 @@ export default function Home() {
   const [friends, setFriends] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [friendBalances, setFriendBalances] = useState<FriendBalance[]>([]);
-  const [groupSummaries, setGroupSummaries] = useState<GroupSummary[]>([]);
-  const [recentActivity, setRecentActivity] = useState<Expense[]>([]);
+  const [_groupSummaries, _setGroupSummaries] = useState<GroupSummary[]>([]);
+  const [_recentActivity, _setRecentActivity] = useState<Activity[]>([]);
   const [balance, setBalance] = useState<Balance>({
     totalOwed: 0,
     totalOwe: 0,
     netBalance: 0
   });
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -260,7 +260,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {recentActivity.map((expense) => (
+                {_recentActivity.map((expense) => (
                   <div key={expense._id} className="px-6 py-4">
                     <div className="flex justify-between items-start">
                       <div>
@@ -295,7 +295,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {groupSummaries.map((summary) => (
+                {_groupSummaries.map((summary) => (
                   <div key={summary.group._id} className="px-6 py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">

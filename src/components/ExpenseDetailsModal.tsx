@@ -20,7 +20,7 @@ export default function ExpenseDetailsModal({
   if (!isOpen) return null;
 
   const isCreator = expense.payerId._id === currentUserId;
-  const userSplit = expense.splits.find(split => split.userId._id === currentUserId);
+  const [_userSplit, setUserSplit] = useState<Split | null>(null);
   const totalAmount = expense.amount;
   const creatorShare = totalAmount - expense.splits.reduce((acc, split) => acc + split.amount, 0);
 

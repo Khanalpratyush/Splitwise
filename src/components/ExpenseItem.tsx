@@ -5,15 +5,21 @@ import { format } from 'date-fns';
 import { Trash2 } from 'lucide-react';
 import ExpenseDetailsModal from './ExpenseDetailsModal';
 import { Session } from 'next-auth';
-import type { Expense, CategoryConfig } from '@/types';
-import { CATEGORIES } from '@/types';
-import DeleteConfirmationDialog from './DeleteConfirmationDialog';
+import type { Expense } from '@/types';
+import { CheckCircle } from 'lucide-react';
+import logger from '@/utils/logger';
+import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog';
 
 interface ExpenseItemProps {
   expense: Expense;
   session: Session | null;
   onEdit: () => void;
   onDelete: () => void;
+}
+
+interface UserId {
+  _id: string;
+  name: string;
 }
 
 export default function ExpenseItem({ expense, session, onEdit, onDelete }: ExpenseItemProps) {
@@ -23,11 +29,7 @@ export default function ExpenseItem({ expense, session, onEdit, onDelete }: Expe
 
   const isCreator = expense.payerId._id === session?.user.id;
   const userSplit = expense.splits.find(split => split.userId === session?.user.id);
-  const isSettled = userSplit?.settled || false;
-
-  const categoryConfig = expense.type === 'solo' && expense.category 
-    ? CATEGORIES.find(cat => cat.value === expense.category)
-    : null;
+  const [_isSettled, setIsSettled] = useState(userSplit?.settled || false);
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -39,6 +41,12 @@ export default function ExpenseItem({ expense, session, onEdit, onDelete }: Expe
     }
   };
 
+  const getUserName = (userId: string | UserId): string => {
+    if (!userId) return 'Unknown';
+    if (typeof userId === 'string') return 'Unknown';
+    return userId.name || 'Unknown';
+  };
+
   return (
     <>
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
@@ -46,17 +54,9 @@ export default function ExpenseItem({ expense, session, onEdit, onDelete }: Expe
           <div>
             <h3 className="font-medium text-gray-900 dark:text-white">{expense.description}</h3>
             <div className="flex items-center gap-2 mt-1">
-              {categoryConfig && (
-                <span className={`
-                  inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm
-                  ${categoryConfig.color.light} ${categoryConfig.color.dark}
-                `}>
-                  <span>{categoryConfig.icon}</span>
-                  <span>{categoryConfig.label}</span>
-                </span>
-              )}
+              {/* CategoryConfig is not used */}
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                {expense.payerId.name} paid • {new Date(expense.date).toLocaleDateString()}
+                {getUserName(expense.payerId)} paid • {new Date(expense.date).toLocaleDateString()}
               </p>
             </div>
           </div>
