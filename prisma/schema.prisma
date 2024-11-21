@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env.DATABASE_URL
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  password      String
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  groups        Group[]   @relation("GroupMembers")
+  ownedGroups   Group[]   @relation("GroupOwner")
+  expenses      Expense[] @relation("ExpensePayer")
+  splits        Split[]
+}
+
+model Group {
+  id          String    @id @default(cuid())
+  name        String
+  ownerId     String
+  owner       User      @relation("GroupOwner", fields: [ownerId], references: [id])
+  members     User[]    @relation("GroupMembers")
+  expenses    Expense[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  description String
+  amount      Float
+  date        DateTime @default(now())
+  payerId     String
+  payer       User     @relation("ExpensePayer", fields: [payerId], references: [id])
+  groupId     String?
+  group       Group?   @relation(fields: [groupId], references: [id])
+  splits      Split[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Split {
+  id         String   @id @default(cuid())
+  amount     Float
+  expenseId  String
+  expense    Expense  @relation(fields: [expenseId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+} 
