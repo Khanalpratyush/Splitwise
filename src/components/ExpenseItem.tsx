@@ -5,10 +5,9 @@ import { format } from 'date-fns';
 import { Trash2 } from 'lucide-react';
 import ExpenseDetailsModal from './ExpenseDetailsModal';
 import { Session } from 'next-auth';
-import type { Expense } from '@/types';
-import { CheckCircle } from 'lucide-react';
-import logger from '@/utils/logger';
-import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog';
+import type { Expense, CategoryConfig } from '@/types';
+import { CATEGORIES } from '@/types';
+import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 
 interface ExpenseItemProps {
   expense: Expense;
@@ -17,34 +16,34 @@ interface ExpenseItemProps {
   onDelete: () => void;
 }
 
-interface UserId {
-  _id: string;
-  name: string;
-}
-
 export default function ExpenseItem({ expense, session, onEdit, onDelete }: ExpenseItemProps) {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isCreator = expense.payerId._id === session?.user.id;
   const userSplit = expense.splits.find(split => split.userId === session?.user.id);
-  const [_isSettled, setIsSettled] = useState(userSplit?.settled || false);
+  const isSettled = userSplit?.settled || false;
+
+  const categoryConfig = expense.type === 'solo' && expense.category 
+    ? CATEGORIES.find(cat => cat.value === expense.category)
+    : null;
 
   const handleDelete = async () => {
     setIsDeleting(true);
+    setError(null);
+    
     try {
       await onDelete();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete expense';
+      setError(message);
+      logger.error('Error deleting expense', { error, expenseId: expense._id });
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirmation(false);
     }
-  };
-
-  const getUserName = (userId: string | UserId): string => {
-    if (!userId) return 'Unknown';
-    if (typeof userId === 'string') return 'Unknown';
-    return userId.name || 'Unknown';
   };
 
   return (
@@ -54,9 +53,17 @@ export default function ExpenseItem({ expense, session, onEdit, onDelete }: Expe
           <div>
             <h3 className="font-medium text-gray-900 dark:text-white">{expense.description}</h3>
             <div className="flex items-center gap-2 mt-1">
-              {/* CategoryConfig is not used */}
+              {categoryConfig && (
+                <span className={`
+                  inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm
+                  ${categoryConfig.color.light} ${categoryConfig.color.dark}
+                `}>
+                  <span>{categoryConfig.icon}</span>
+                  <span>{categoryConfig.label}</span>
+                </span>
+              )}
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                {getUserName(expense.payerId)} paid • {new Date(expense.date).toLocaleDateString()}
+                {expense.payerId.name} paid • {new Date(expense.date).toLocaleDateString()}
               </p>
             </div>
           </div>
@@ -105,14 +112,16 @@ export default function ExpenseItem({ expense, session, onEdit, onDelete }: Expe
         isOpen={showDeleteConfirmation}
         onClose={() => setShowDeleteConfirmation(false)}
         onConfirm={handleDelete}
-        isDeleting={isDeleting}
+        title="Delete Expense"
+        message="Are you sure you want to delete this expense? This action cannot be undone."
+        isLoading={isDeleting}
       />
 
       <ExpenseDetailsModal
         isOpen={isDetailsModalOpen}
         onClose={() => setIsDetailsModalOpen(false)}
         expense={expense}
-        currentUserId={session?.user.id}
+        currentUserId={session?.user?.id ?? ''}
       />
     </>
   );

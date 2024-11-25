@@ -9,17 +9,21 @@ import { useSession } from 'next-auth/react';
 interface AddExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  friends: User[];
+  friends: ExtendedUser[];
   groups: Group[];
   onExpenseAdded: () => void;
 }
 
 const VALID_CATEGORIES: ExpenseCategory[] = ['food', 'transport', 'shopping', 'entertainment', 'utilities', 'rent', 'health', 'travel', 'education', 'other'];
 
+interface ExtendedUser extends User {
+  isCurrentUser?: boolean;
+}
+
 const FriendCheckbox = ({ friend, selected, onToggle }: { 
-  friend: User; 
+  friend: ExtendedUser; 
   selected: boolean; 
-  onToggle: (friend: User) => void;
+  onToggle: (friend: ExtendedUser) => void;
 }) => {
   const initials = friend.name
     ?.split(' ')
@@ -70,7 +74,7 @@ export default function AddExpenseModal({
   const [category, setCategory] = useState<ExpenseCategory>('other');
   const [expenseType, setExpenseType] = useState<'split' | 'solo'>('split');
   const [selectedGroupId, setSelectedGroupId] = useState('');
-  const [selectedFriends, setSelectedFriends] = useState<User[]>([]);
+  const [selectedFriends, setSelectedFriends] = useState<ExtendedUser[]>([]);
   const [splitType, setSplitType] = useState<'equal' | 'percentage' | 'exact'>('equal');
   const [splits, setSplits] = useState<{ userId: string; amount: number; percentage: number }[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +93,7 @@ export default function AddExpenseModal({
   ];
 
   // Update friend selection handler
-  const toggleFriend = (friend: User) => {
+  const toggleFriend = (friend: ExtendedUser) => {
     setSelectedFriends(prev => {
       const isSelected = prev.some(f => f._id === friend._id);
       if (isSelected) {
@@ -100,21 +104,51 @@ export default function AddExpenseModal({
     });
   };
 
-  const calculateSplits = useCallback(() => {
-    if (splitType === 'equal') {
-      const splitAmount = amount / (selectedFriends.length + 1);
-      setSplits(selectedFriends.map(friend => ({
-        userId: friend._id,
-        amount: splitAmount,
-      })));
+  const calculateSplits = () => {
+    if (!amount || selectedFriends.length === 0) return;
+
+    const totalAmount = parseFloat(amount);
+    if (isNaN(totalAmount)) return;
+
+    const numPeople = selectedFriends.length;
+
+    switch (splitType) {
+      case 'equal':
+        const equalShare = totalAmount / numPeople;
+        setSplits(selectedFriends.map(friend => ({
+          userId: friend._id,
+          amount: equalShare,
+          percentage: 100 / numPeople
+        })));
+        break;
+
+      case 'percentage':
+        const defaultPercentage = 100 / numPeople;
+        setSplits(selectedFriends.map(friend => ({
+          userId: friend._id,
+          amount: (totalAmount * defaultPercentage) / 100,
+          percentage: defaultPercentage
+        })));
+        break;
+
+      case 'exact':
+        setSplits(selectedFriends.map(friend => {
+          const existingSplit = splits.find(s => s.userId === friend._id);
+          return existingSplit || {
+            userId: friend._id,
+            amount: totalAmount / numPeople,
+            percentage: 100 / numPeople
+          };
+        }));
+        break;
     }
-  }, [amount, selectedFriends, splitType, splits]);
+  };
 
   useEffect(() => {
     if (splitType === 'equal' || splitType === 'percentage') {
       calculateSplits();
     }
-  }, [splitType, selectedFriends.length, calculateSplits]);
+  }, [splitType, amount, selectedFriends.length]);
 
   const clearForm = useCallback(() => {
     setDescription('');
@@ -240,7 +274,7 @@ export default function AddExpenseModal({
       const selectedGroup = groups.find(g => g._id === groupId);
       if (selectedGroup) {
         const groupMembers = friends.filter(friend => 
-          selectedGroup.members.includes(friend._id)
+          selectedGroup.members.some(member => member._id === friend._id)
         );
         setSelectedFriends(groupMembers);
         setTimeout(() => calculateSplits(), 0);

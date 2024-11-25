@@ -53,7 +53,7 @@ export default function Navbar() {
       read: false
     }
   ]);
-  const [_setTotalBalance, setTotalBalance] = useState(0);
+  const [totalBalance, setTotalBalance] = useState(0);
 
   // Close menus when clicking outside
   useEffect(() => {

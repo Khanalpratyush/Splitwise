@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function SignIn({ _error }: { _error?: string }) {
+export default function SignIn() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -101,7 +101,7 @@ export default function SignIn({ _error }: { _error?: string }) {
               href="/auth/signup"
               className="font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300"
             >
-              Don&apos;t have an account? Sign up
+              Don't have an account? Sign up
             </Link>
           </div>
         </form>

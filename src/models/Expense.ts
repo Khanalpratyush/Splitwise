@@ -1,5 +1,5 @@
 import mongoose, { Schema, model, models } from 'mongoose';
-import type { _ExpenseLabel } from '@/types';
+import type { ExpenseLabel } from '@/types';
 
 const EXPENSE_LABELS = [
   'food',
@@ -9,20 +9,19 @@ const EXPENSE_LABELS = [
   'rent',
   'entertainment',
   'groceries',
-  'transportation',
-  'health',
-  'education',
   'other'
 ] as const;
 
 const ExpenseSchema = new Schema({
   description: {
     type: String,
-    required: true
+    required: [true, 'Description is required'],
+    trim: true
   },
   amount: {
     type: Number,
-    required: true
+    required: [true, 'Amount is required'],
+    min: [0, 'Amount must be positive']
   },
   date: {
     type: Date,
@@ -35,7 +34,18 @@ const ExpenseSchema = new Schema({
   },
   groupId: {
     type: Schema.Types.ObjectId,
-    ref: 'Group'
+    ref: 'Group',
+    default: null
+  },
+  type: {
+    type: String,
+    enum: ['split', 'solo', 'settlement'],
+    default: 'split'
+  },
+  label: {
+    type: String,
+    enum: EXPENSE_LABELS,
+    default: 'other'
   },
   splits: [{
     userId: {
@@ -51,26 +61,13 @@ const ExpenseSchema = new Schema({
       type: Boolean,
       default: false
     }
-  }],
-  type: {
-    type: String,
-    enum: ['solo', 'split'],
-    default: 'solo'
-  },
-  image: String,
-  label: {
-    type: String,
-    enum: EXPENSE_LABELS,
-    required: true,
-    default: 'other'
-  }
+  }]
 }, {
   timestamps: true
 });
 
-// Add indexes
+// Indexes
 ExpenseSchema.index({ payerId: 1 });
-ExpenseSchema.index({ 'splits.userId': 1 });
 ExpenseSchema.index({ groupId: 1 });
 ExpenseSchema.index({ date: -1 });
 

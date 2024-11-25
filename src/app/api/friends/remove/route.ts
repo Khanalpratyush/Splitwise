@@ -24,46 +24,28 @@ export async function POST(request: Request) {
 
     await connectDB();
 
-    // Check if friend exists
-    const friend = await User.findById(friendId);
-    if (!friend) {
-      return NextResponse.json(
-        { message: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    // Check if already friends
-    const currentUser = await User.findById(session.user.id);
-    if (currentUser?.friends.includes(friendId)) {
-      return NextResponse.json(
-        { message: 'Already friends' },
-        { status: 400 }
-      );
-    }
-
-    // Add friend to user's friends list
+    // Remove friend from user's friends list
     await User.findByIdAndUpdate(
       session.user.id,
-      { $addToSet: { friends: friendId } }
+      { $pull: { friends: friendId } }
     );
 
-    // Add user to friend's friends list
+    // Remove user from friend's friends list
     await User.findByIdAndUpdate(
       friendId,
-      { $addToSet: { friends: session.user.id } }
+      { $pull: { friends: session.user.id } }
     );
 
-    logger.info('Friend added successfully', { userId: session.user.id, friendId });
+    logger.info('Friend removed successfully', { userId: session.user.id, friendId });
     return NextResponse.json({ 
       success: true,
-      message: 'Friend added successfully' 
+      message: 'Friend removed successfully' 
     });
 
   } catch (error) {
-    logger.error('Error adding friend', { error });
+    logger.error('Error removing friend', error);
     return NextResponse.json(
-      { message: 'Error adding friend' },
+      { message: 'Error removing friend' },
       { status: 500 }
     );
   }

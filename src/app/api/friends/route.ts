@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]/route';
-import { User } from '@/models/User';
-import { UserDocument } from '@/types/mongoose';
+import { authOptions } from '@/lib/auth';
+import { User, IUser } from '@/models/User';
 import connectDB from '@/lib/mongodb';
 import logger from '@/utils/logger';
-import type { NextRequest } from 'next/server';
+import mongoose from 'mongoose';
 
-export async function GET(_request: NextRequest) {
+interface PopulatedUser extends Omit<IUser, 'friends'> {
+  friends: IUser[];
+}
+
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     
@@ -19,8 +22,8 @@ export async function GET(_request: NextRequest) {
     await connectDB();
 
     const currentUser = await User.findById(session.user.id)
-      .populate('friends', 'name email')
-      .lean();
+      .populate<{ friends: IUser[] }>('friends', 'name email')
+      .lean() as unknown as PopulatedUser;
 
     if (!currentUser) {
       return NextResponse.json({ message: 'User not found' }, { status: 404 });

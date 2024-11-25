@@ -1,11 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
-import { User } from '@/models/User';
+import { authOptions } from '@/lib/auth';
+import { User, IUser } from '@/models/User';
 import connectDB from '@/lib/mongodb';
 import logger from '@/utils/logger';
+import mongoose from 'mongoose';
 
-export async function GET(request: Request) {
+interface PopulatedUser extends Omit<IUser, 'friends'> {
+  friends: IUser[];
+}
+
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
@@ -14,69 +19,52 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email')?.toLowerCase().trim();
+    const query = searchParams.get('email');
 
-    if (!email) {
+    if (!query) {
       return NextResponse.json(
         { message: 'Email is required' },
         { status: 400 }
       );
     }
 
-    logger.debug('Searching user by email', { email });
     await connectDB();
 
-    // Get current user's friends first
     const currentUser = await User.findById(session.user.id)
-      .select('friends')
-      .lean();
+      .populate<{ friends: IUser[] }>('friends', 'name email')
+      .lean() as unknown as PopulatedUser;
 
-    const friendIds = currentUser?.friends || [];
-
-    // Check if trying to add self
-    if (email === session.user.email?.toLowerCase()) {
-      return NextResponse.json(
-        { message: 'You cannot add yourself as a friend' },
-        { status: 400 }
-      );
+    if (!currentUser) {
+      return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
 
-    // Find user by exact email match, excluding current user and existing friends
+    const friendIds = currentUser.friends?.map((f: IUser) => f._id.toString()) || [];
+
     const user = await User.findOne({
-      email: email,
-      _id: { 
-        $ne: session.user.id,
-        $nin: friendIds
-      }
-    })
-    .select('name email')
-    .lean();
+      email: query,
+      _id: { $ne: session.user.id }
+    }).select('name email _id').lean() as unknown as IUser;
 
     if (!user) {
-      // Check if user exists but is already a friend
-      const existingUser = await User.findOne({ email: email })
-        .select('_id')
-        .lean();
-
-      if (existingUser && friendIds.includes(existingUser._id)) {
-        return NextResponse.json(
-          { message: 'This user is already your friend' },
-          { status: 400 }
-        );
-      }
-
       return NextResponse.json(
-        { message: 'No user found with that email address' },
+        { message: 'User not found' },
         { status: 404 }
       );
     }
 
-    logger.info('User found successfully');
+    if (friendIds.includes(user._id.toString())) {
+      return NextResponse.json(
+        { message: 'User is already your friend' },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(user);
+
   } catch (error) {
-    logger.error('Error searching user', error);
+    logger.error('Error searching users', error);
     return NextResponse.json(
-      { message: 'Error searching user' },
+      { message: 'Error searching users' },
       { status: 500 }
     );
   }

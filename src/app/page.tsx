@@ -15,12 +15,16 @@ import {
 } from 'lucide-react';
 import logger from '@/utils/logger';
 import type { Expense, Balance, User, Group } from '@/types';
+import { getInitials } from '@/utils/string';
+import { IUser } from '@/models/User';
 
 interface FriendBalance {
-  friend: User;
+  friendId: string;
+  name: string;
+  email: string;
   youOwe: number;
   theyOwe: number;
-  netBalance: number;
+  netAmount: number;
 }
 
 interface GroupSummary {
@@ -29,6 +33,12 @@ interface GroupSummary {
   recentActivity: Date;
 }
 
+// Add type guard function at the top
+const getUserId = (userId: string | IUser): string => {
+  if (typeof userId === 'string') return userId;
+  return userId._id.toString();
+};
+
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth();
   const { data: session } = useSession();
@@ -36,145 +46,104 @@ export default function Home() {
   const [friends, setFriends] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [friendBalances, setFriendBalances] = useState<FriendBalance[]>([]);
-  const [_groupSummaries, _setGroupSummaries] = useState<GroupSummary[]>([]);
-  const [_recentActivity, _setRecentActivity] = useState<Activity[]>([]);
+  const [groupSummaries, setGroupSummaries] = useState<GroupSummary[]>([]);
+  const [recentActivity, setRecentActivity] = useState<Expense[]>([]);
   const [balance, setBalance] = useState<Balance>({
     totalOwed: 0,
     totalOwe: 0,
     netBalance: 0
   });
-  const [_loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        setLoading(true);
-        setError(null);
-
         const [expensesRes, friendsRes, groupsRes] = await Promise.all([
-          fetch('/api/expenses').then(async res => {
-            if (!res.ok) {
-              const data = await res.json();
-              throw new Error(data.message || 'Failed to fetch expenses');
-            }
-            return res.json();
-          }),
-          fetch('/api/friends').then(async res => {
-            if (!res.ok) {
-              const data = await res.json();
-              throw new Error(data.message || 'Failed to fetch friends');
-            }
-            return res.json();
-          }),
-          fetch('/api/groups').then(async res => {
-            if (!res.ok) {
-              const data = await res.json();
-              throw new Error(data.message || 'Failed to fetch groups');
-            }
-            return res.json();
-          })
+          fetch('/api/expenses').then(res => res.json()),
+          fetch('/api/friends').then(res => res.json()),
+          fetch('/api/groups').then(res => res.json())
         ]);
 
-        setExpenses(expensesRes || []);
-        setFriends(friendsRes || []);
-        setGroups(groupsRes || []);
+        setExpenses(expensesRes);
+        setFriends(friendsRes);
+        setGroups(groupsRes);
 
-        // Calculate balances correctly
+        // Calculate total balances
         let totalOwed = 0;
         let totalOwe = 0;
 
+        // Create a map to track individual balances with each friend
+        const friendBalanceMap = new Map<string, {
+          youOwe: number;
+          theyOwe: number;
+          netAmount: number;
+        }>();
+
         expensesRes.forEach((expense: Expense) => {
           if (expense.type === 'split') {
-            if (expense.payerId._id === session?.user.id) {
-              // You paid, calculate what others owe you
-              expense.splits.forEach(split => {
-                if (!split.settled) {
+            const payerId = getUserId(expense.payerId);
+            const isUserPayer = payerId === session?.user.id;
+
+            expense.splits.forEach(split => {
+              const splitUserId = getUserId(split.userId);
+              
+              if (!split.settled) {
+                if (isUserPayer && splitUserId !== session?.user.id) {
+                  // You paid, they owe you
+                  const current = friendBalanceMap.get(splitUserId) || { youOwe: 0, theyOwe: 0, netAmount: 0 };
+                  current.theyOwe += split.amount;
+                  current.netAmount = current.theyOwe - current.youOwe;
+                  friendBalanceMap.set(splitUserId, current);
                   totalOwed += split.amount;
+                } else if (!isUserPayer && splitUserId === session?.user.id) {
+                  // They paid, you owe them
+                  const current = friendBalanceMap.get(payerId) || { youOwe: 0, theyOwe: 0, netAmount: 0 };
+                  current.youOwe += split.amount;
+                  current.netAmount = current.theyOwe - current.youOwe;
+                  friendBalanceMap.set(payerId, current);
+                  totalOwe += split.amount;
                 }
-              });
-            } else {
-              // Someone else paid, find what you owe
-              const yourSplit = expense.splits.find(
-                split => split.userId === session?.user.id
-              );
-              if (yourSplit && !yourSplit.settled) {
-                totalOwe += yourSplit.amount;
               }
-            }
+            });
           }
         });
 
-        // Update balance state with rounded values
+        // Convert friend balances to array and calculate net amounts
+        const friendBalances = Array.from(friendBalanceMap.entries()).map(([friendId, balance]) => {
+          const friend = friendsRes.find((f: User) => f._id === friendId);
+          return {
+            friendId,
+            name: friend?.name || 'Unknown',
+            email: friend?.email || '',
+            youOwe: balance.youOwe,
+            theyOwe: balance.theyOwe,
+            netAmount: balance.netAmount
+          };
+        });
+
+        // Sort friend balances by absolute net amount (highest first)
+        friendBalances.sort((a, b) => Math.abs(b.netAmount) - Math.abs(a.netAmount));
+
         setBalance({
           totalOwed: Math.round(totalOwed * 100) / 100,
           totalOwe: Math.round(totalOwe * 100) / 100,
           netBalance: Math.round((totalOwed - totalOwe) * 100) / 100
         });
 
-        // Calculate friend balances
-        const friendBalanceMap = new Map<string, {
-          youOwe: number;
-          theyOwe: number;
-        }>();
-
-        expensesRes.forEach((expense: Expense) => {
-          if (expense.type === 'split') {
-            if (expense.payerId._id === session?.user.id) {
-              // You paid
-              expense.splits.forEach(split => {
-                if (!split.settled) {
-                  const current = friendBalanceMap.get(split.userId) || { youOwe: 0, theyOwe: 0 };
-                  friendBalanceMap.set(split.userId, {
-                    ...current,
-                    theyOwe: current.theyOwe + split.amount
-                  });
-                }
-              });
-            } else {
-              // Someone else paid
-              const yourSplit = expense.splits.find(split => split.userId === session?.user.id);
-              if (yourSplit && !yourSplit.settled) {
-                const current = friendBalanceMap.get(expense.payerId._id) || { youOwe: 0, theyOwe: 0 };
-                friendBalanceMap.set(expense.payerId._id, {
-                  ...current,
-                  youOwe: current.youOwe + yourSplit.amount
-                });
-              }
-            }
-          }
-        });
-
-        // Convert friend balances to array format with proper rounding
-        const friendBalances = Array.from(friendBalanceMap.entries())
-          .map(([friendId, balance]) => {
-            const friend = friendsRes.find((f: User) => f._id === friendId);
-            if (!friend) return null;
-            
-            return {
-              friend,
-              youOwe: Math.round(balance.youOwe * 100) / 100,
-              theyOwe: Math.round(balance.theyOwe * 100) / 100,
-              netBalance: Math.round((balance.theyOwe - balance.youOwe) * 100) / 100
-            };
-          })
-          .filter(Boolean) as FriendBalance[];
-
         setFriendBalances(friendBalances);
-
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'An error occurred';
-        logger.error('Error fetching dashboard data', error);
-        setError(message);
+        setError('Failed to fetch data');
+        logger.error('Error fetching dashboard data:', error);
       } finally {
         setLoading(false);
       }
     }
 
-    if (isAuthenticated && session?.user.id) {
+    if (session?.user?.id) {
       fetchData();
     }
-  }, [isAuthenticated, session?.user.id]);
+  }, [session?.user?.id]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -260,7 +229,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {_recentActivity.map((expense) => (
+                {recentActivity.map((expense) => (
                   <div key={expense._id} className="px-6 py-4">
                     <div className="flex justify-between items-start">
                       <div>
@@ -295,7 +264,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {_groupSummaries.map((summary) => (
+                {groupSummaries.map((summary) => (
                   <div key={summary.group._id} className="px-6 py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -352,30 +321,29 @@ export default function Home() {
                   </div>
                 ) : (
                   friendBalances.map((balance) => {
-                    const initials = getInitials(balance.friend?.name);
-                    const name = balance.friend?.name || 'Unknown';
+                    const initials = getInitials(balance.name);
 
                     return (
-                      <div key={balance.friend._id} className="px-6 py-4 flex items-center justify-between">
+                      <div key={balance.friendId} className="px-6 py-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-700 dark:text-gray-300 font-medium">
                             {initials}
                           </div>
                           <div>
-                            <h3 className="font-medium text-gray-900 dark:text-white">{name}</h3>
+                            <h3 className="font-medium text-gray-900 dark:text-white">{balance.name}</h3>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                              {balance.netBalance > 0 
+                              {balance.netAmount > 0 
                                 ? 'owes you' 
                                 : 'you owe'}
                             </p>
                           </div>
                         </div>
                         <span className={`font-medium ${
-                          balance.netBalance > 0 
+                          balance.netAmount > 0 
                             ? 'text-emerald-600 dark:text-emerald-400' 
                             : 'text-red-600 dark:text-red-400'
                         }`}>
-                          ${Math.abs(balance.netBalance).toFixed(2)}
+                          ${Math.abs(balance.netAmount).toFixed(2)}
                         </span>
                       </div>
                     );

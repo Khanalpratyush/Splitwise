@@ -2,7 +2,7 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
 export default withAuth(
-  function middleware(_req) {
+  function middleware(req) {
     // Add custom middleware logic here if needed
     return NextResponse.next();
   },
@@ -18,5 +18,6 @@ export const config = {
     "/groups/:path*",
     "/expenses/:path*",
     "/friends/:path*",
+    "/settings"
   ],
 }; 

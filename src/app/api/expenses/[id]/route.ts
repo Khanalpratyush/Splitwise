@@ -1,11 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { Expense } from '@/models/Expense';
 import connectDB from '@/lib/mongodb';
 import logger from '@/utils/logger';
+import { ObjectId } from 'mongodb';
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+
+export async function PUT(
+  request: NextRequest,
+  context: { params: { id: string } }
+): Promise<NextResponse> {
   try {
     const session = await getServerSession(authOptions);
     
@@ -25,14 +30,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     await connectDB();
 
-    const expense = await Expense.findById(params.id);
-
+    const expense = await Expense.findById(context.params.id);
     if (!expense) {
       return NextResponse.json({ message: 'Expense not found' }, { status: 404 });
     }
 
     if (expense.payerId.toString() !== session.user.id) {
-      return NextResponse.json({ message: 'Only the creator can edit this expense' }, { status: 403 });
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
     }
 
     expense.description = description;
@@ -43,22 +47,21 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     await expense.save();
 
     await expense.populate('payerId groupId', 'name');
-
     logger.info('Expense updated successfully', { expenseId: expense._id });
     return NextResponse.json(expense, { status: 200 });
   } catch (error) {
     logger.error('Error updating expense', error);
     return NextResponse.json(
-      { message: 'Error updating expense' },
+      { message: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+  request: NextRequest,
+  context: { params: { id: string } }
+): Promise<NextResponse> {
   try {
     const session = await getServerSession(authOptions);
     
@@ -66,30 +69,56 @@ export async function DELETE(
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    await connectDB();
-
-    const expense = await Expense.findById(params.id);
-
-    if (!expense) {
-      return NextResponse.json({ message: 'Expense not found' }, { status: 404 });
+    const expenseId = context.params.id;
+    if (!expenseId || expenseId.length !== 24) {
+      return NextResponse.json(
+        { message: 'Invalid expense ID' },
+        { status: 400 }
+      );
     }
 
-    if (expense.payerId.toString() !== session.user.id) {
+    await connectDB();
+
+    const expense = await Expense.findById(expenseId);
+    
+    if (!expense) {
+      logger.warn('Expense not found or already deleted', { expenseId });
+      return NextResponse.json(
+        { message: 'Expense not found or already deleted', success: true },
+        { status: 200 }
+      );
+    }
+
+    const payerId = expense.payerId.toString();
+    if (payerId !== session.user.id) {
       return NextResponse.json(
         { message: 'Only the creator can delete this expense' },
         { status: 403 }
       );
     }
 
-    await Expense.findByIdAndDelete(params.id);
+    await Expense.findByIdAndDelete(expenseId);
 
-    logger.info('Expense deleted successfully', { expenseId: params.id });
-    return NextResponse.json({ message: 'Expense deleted successfully' });
+    logger.info('Expense deleted successfully', { 
+      expenseId,
+      userId: session.user.id 
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Expense deleted successfully'
+    });
+
   } catch (error) {
-    logger.error('Error deleting expense', error);
+    logger.error('Error deleting expense', {
+      error,
+      expenseId: context.params.id,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
     return NextResponse.json(
       { message: 'Error deleting expense' },
       { status: 500 }
     );
   }
-} 
+}

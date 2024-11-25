@@ -3,8 +3,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSession } from 'next-auth/react';
+import { useModal } from '@/hooks/useModal';
 import { Trash2, CheckCircle, Plus, Upload } from 'lucide-react';
-import type { Expense, Group, User } from '@/types';
+import AddExpenseModal from '@/components/AddExpenseModal';
+import EditExpenseModal from '@/components/EditExpenseModal';
+import ExpenseDetailsModal from '@/components/ExpenseDetailsModal';
+import ExpenseCSVImport from '@/components/ExpenseCSVImport';
+import logger from '@/utils/logger';
+import type { Expense, Group, User, ExpenseLabelConfig } from '@/types';
+import { EXPENSE_LABELS } from '@/types';
+import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog';
 
 type ExpenseTab = 'created' | 'involved';
 type SortOption = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc';
@@ -13,14 +21,6 @@ type TimeFilter = 'all' | 'this-month' | 'last-month' | 'this-year' | 'custom';
 interface CustomDateRange {
   start: string;
   end: string;
-}
-
-interface Session {
-  user?: {
-    id: string;
-    name?: string;
-    email?: string;
-  };
 }
 
 export default function ExpensesPage() {
@@ -175,25 +175,35 @@ export default function ExpensesPage() {
 
   const handleExpenseDeleted = useCallback(async (expenseId: string) => {
     try {
+      // Ensure we have a valid expense ID
+      if (!expenseId) {
+        throw new Error('Invalid expense ID');
+      }
+
       const response = await fetch(`/api/expenses/${expenseId}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
+      const data = await response.json();
+      
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.message || 'Failed to delete expense');
       }
 
+      // Only update the UI if deletion was successful
       setExpenses(prevExpenses => prevExpenses.filter(e => e._id !== expenseId));
       setFilteredExpenses(prevExpenses => prevExpenses.filter(e => e._id !== expenseId));
-      
-      await refreshExpenses();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete expense';
       setError(message);
-      logger.error('Error deleting expense', error);
+      logger.error('Error deleting expense', { error, expenseId });
+      // Re-throw the error so the ExpenseItem component can handle it
+      throw error;
     }
-  }, [refreshExpenses]);
+  }, []);
 
   // Modal handlers
   const openAddModal = useCallback(() => {
@@ -207,17 +217,12 @@ export default function ExpensesPage() {
   const openImportModal = useCallback(() => {
     setIsImportModalOpen(true);
   }, []);
-  const closeImportModal = () => setIsImportModalOpen(false);
-
-  const openEditModal = useCallback((expense: Expense) => {
-    setSelectedExpense(expense);
-    setIsEditModalOpen(true);
+  const closeImportModal = useCallback(() => {
+    setIsImportModalOpen(false);
   }, []);
 
-  const closeEditModal = useCallback(() => {
-    setIsEditModalOpen(false);
-    setSelectedExpense(null);
-  }, []);
+  const openEditModal = () => setIsEditModalOpen(true);
+  const closeEditModal = () => setIsEditModalOpen(false);
 
   const openDetailsModal = () => setIsDetailsModalOpen(true);
   const closeDetailsModal = () => setIsDetailsModalOpen(false);
@@ -238,7 +243,7 @@ export default function ExpensesPage() {
         return total + expense.amount;
       } else if (tab === 'involved' && payerId !== session.user.id) {
         const userSplit = expense.splits.find(split => {
-          const splitUserId = split.userId?._id || split.userId;
+          const splitUserId = typeof split.userId === 'string' ? split.userId : split.userId._id;
           return splitUserId === session.user.id;
         });
         return total + (userSplit?.amount || 0);
@@ -250,14 +255,14 @@ export default function ExpensesPage() {
   const handleEditExpense = useCallback((expense: Expense) => {
     if (expense.payerId._id === session?.user.id) {
       setSelectedExpense(expense);
-      openEditModal(expense);
+      openEditModal();
     }
   }, [session?.user.id, openEditModal]);
 
-  const handleViewDetails = useCallback((expense: Expense) => {
+  const handleViewDetails = (expense: Expense) => {
     setSelectedExpense(expense);
     openDetailsModal();
-  }, []);
+  };
 
   if (authLoading || (isLoading && expenses.length === 0)) {
     return (
@@ -472,7 +477,7 @@ export default function ExpensesPage() {
 
         <ExpenseCSVImport
           isOpen={isImportModalOpen}
-          onClose={() => setIsImportModalOpen(false)}
+          onClose={closeImportModal}
           friends={friends}
           groups={groups}
           onExpenseAdded={handleExpenseAdded}
@@ -482,8 +487,18 @@ export default function ExpensesPage() {
           <>
             <EditExpenseModal
               isOpen={isEditModalOpen}
-              onClose={closeEditModal}
-              expense={selectedExpense}
+              onClose={() => {
+                setIsEditModalOpen(false);
+                setSelectedExpense(null);
+              }}
+              expense={{
+                ...selectedExpense,
+                splits: selectedExpense.splits.map(split => ({
+                  userId: typeof split.userId === 'string' ? split.userId : split.userId._id.toString(),
+                  amount: split.amount,
+                  settled: split.settled
+                }))
+              }}
               friends={friends}
               groups={groups}
               onExpenseUpdated={handleExpenseAdded}
@@ -496,6 +511,7 @@ export default function ExpensesPage() {
                 setSelectedExpense(null);
               }}
               expense={selectedExpense}
+              currentUserId={session?.user?.id ?? ''}
             />
           </>
         )}
@@ -511,7 +527,7 @@ function ExpenseItem({
   onDelete
 }: { 
   expense: Expense;
-  session: Session | null;
+  session: any;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -543,16 +559,22 @@ function ExpenseItem({
     try {
       const response = await fetch(`/api/expenses/${expense._id}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
+      const data = await response.json();
+      
       if (!response.ok) {
-        throw new Error('Failed to delete expense');
+        throw new Error(data.message || 'Failed to delete expense');
       }
 
       onDelete();
     } catch (error) {
-      setError('Failed to delete expense');
-      logger.error('Error deleting expense', error);
+      const message = error instanceof Error ? error.message : 'Failed to delete expense';
+      setError(message);
+      logger.error('Error deleting expense', { error, expenseId: expense._id });
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirmation(false);
@@ -591,6 +613,26 @@ function ExpenseItem({
     if (!userId) return 'Unknown';
     if (typeof userId === 'string') return 'Unknown';
     return userId.name || 'Unknown';
+  };
+
+  const handleEdit = async (updatedData: any) => {
+    try {
+      const response = await fetch(`/api/expenses/${expense._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update expense');
+      }
+
+      onEdit(); // Refresh the expenses list
+    } catch (error) {
+      logger.error('Error updating expense', error);
+    }
   };
 
   return (

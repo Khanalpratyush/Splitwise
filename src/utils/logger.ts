@@ -1,27 +1,18 @@
-import type { _LogLevel, _LogPayload } from '@/types';
+import { LogLevel, LogPayload } from '@/types';
 
-type LogFunction = (...args: unknown[]) => void;
-
-interface Logger {
-  debug: LogFunction;
-  info: LogFunction;
-  warn: LogFunction;
-  error: (message: string, error?: Error | unknown) => void;
-}
-
-const logger: Logger = {
-  debug: (...args: unknown[]) => {
+const logger = {
+  debug: (...args: any[]) => {
     if (process.env.NODE_ENV === 'development') {
       console.debug(...args);
     }
   },
-  info: (...args: unknown[]) => {
+  info: (...args: any[]) => {
     console.info(...args);
   },
-  warn: (...args: unknown[]) => {
+  warn: (...args: any[]) => {
     console.warn(...args);
   },
-  error: (message: string, error?: Error | unknown) => {
+  error: (message: string, error?: any) => {
     if (error) {
       if (error instanceof Error) {
         console.error('Error details:', error.message);

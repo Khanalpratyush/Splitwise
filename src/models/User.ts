@@ -2,11 +2,14 @@ import mongoose, { Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 export interface IUser {
+  _id: mongoose.Types.ObjectId;
   name: string;
   email: string;
   password: string;
   image?: string;
-  friends: mongoose.Types.ObjectId[];
+  friends: mongoose.Types.ObjectId[] | IUser[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface IUserMethods {

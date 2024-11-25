@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Users } from 'lucide-react';
 import { User } from '@/types';
 import logger from '@/utils/logger';
 

@@ -1,29 +1,36 @@
-import { ExpenseLabelConfig } from '@/types';
+import type { CategoryConfig } from '@/types';
 
-interface ExpenseLabelProps {
-  label: ExpenseLabelConfig;
-  size?: 'sm' | 'md' | 'lg';
+interface LabelProps {
+  label: {
+    name: string;
+    color: {
+      light: string;
+      dark: string;
+      bg: string;
+      border: string;
+      text: string;
+      darkBg: string;
+      darkBorder: string;
+      darkText: string;
+    };
+  };
 }
 
-export default function ExpenseLabel({ label, size = 'md' }: ExpenseLabelProps) {
-  const sizeClasses = {
-    sm: 'text-xs px-2 py-0.5',
-    md: 'text-sm px-2.5 py-1',
-    lg: 'text-base px-3 py-1.5'
-  };
+export default function ExpenseLabel({ label }: LabelProps) {
+  const getColorClasses = (color: LabelProps['label']['color']) => `
+    ${color.light || ''} 
+    ${color.dark || ''}
+    ${color.bg || ''} 
+    ${color.border || ''} 
+    ${color.text || ''}
+    ${color.darkBg || ''} 
+    ${color.darkBorder || ''} 
+    ${color.darkText || ''}
+  `;
 
   return (
-    <div
-      className={`
-        inline-flex items-center gap-1.5 rounded-full
-        ${label.color.bg} ${label.color.border} ${label.color.text}
-        ${label.color.darkBg} ${label.color.darkBorder} ${label.color.darkText}
-        border ${sizeClasses[size]}
-        transition-colors duration-200
-      `}
-    >
-      <span>{label.icon}</span>
-      <span className="font-medium">{label.label}</span>
+    <div className={`inline-flex items-center px-2 py-1 rounded-md ${getColorClasses(label.color)}`}>
+      {label.name}
     </div>
   );
 } 

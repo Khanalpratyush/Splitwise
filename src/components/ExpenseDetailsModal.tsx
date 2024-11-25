@@ -3,6 +3,7 @@
 import { X } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Expense } from '@/types';
+import { IUser } from '@/models/User';
 
 interface ExpenseDetailsModalProps {
   isOpen: boolean;
@@ -20,7 +21,9 @@ export default function ExpenseDetailsModal({
   if (!isOpen) return null;
 
   const isCreator = expense.payerId._id === currentUserId;
-  const [_userSplit, setUserSplit] = useState<Split | null>(null);
+  const userSplit = expense.splits.find(split => 
+    getUserId(split.userId) === currentUserId
+  );
   const totalAmount = expense.amount;
   const creatorShare = totalAmount - expense.splits.reduce((acc, split) => acc + split.amount, 0);
 
@@ -28,6 +31,18 @@ export default function ExpenseDetailsModal({
   const getInitials = (name?: string) => {
     if (!name) return '?';
     return name.charAt(0).toUpperCase();
+  };
+
+  // Helper function to get user ID
+  const getUserId = (userId: string | IUser): string => {
+    if (typeof userId === 'string') return userId;
+    return userId._id.toString();
+  };
+
+  // Helper function to get user name
+  const getUserName = (userId: string | IUser): string => {
+    if (typeof userId === 'string') return 'Unknown';
+    return userId.name || 'Unknown';
   };
 
   return (
@@ -113,21 +128,24 @@ export default function ExpenseDetailsModal({
                 {/* Other participants */}
                 {expense.splits.map((split) => (
                   <div 
-                    key={split.userId._id}
+                    key={getUserId(split.userId)}
                     className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
                   >
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-600 flex items-center justify-center">
                         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          {getInitials(split.userId?.name)}
+                          {getInitials(getUserName(split.userId))}
                         </span>
                       </div>
                       <div>
                         <p className="font-medium text-gray-900 dark:text-white">
-                          {split.userId?.name || 'Unknown'} {split.userId._id === currentUserId ? '(You)' : ''}
+                          {getUserName(split.userId)} {getUserId(split.userId) === currentUserId ? '(You)' : ''}
                         </p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {split.userId?.email || 'No email'}
+                          {typeof split.userId === 'object' && 'email' in split.userId 
+                            ? split.userId.email 
+                            : 'No email'
+                          }
                         </p>
                       </div>
                     </div>

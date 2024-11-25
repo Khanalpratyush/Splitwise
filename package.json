@@ -5,25 +5,18 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:prod": "SKIP_ESLINT=true next build",
     "start": "next start",
-    "lint": "next lint",
-    "lint:fix": "next lint --fix"
+    "lint": "next lint"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.4",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/papaparse": "^5.3.15",
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
     "bcryptjs": "^2.4.3",
     "chart.js": "^4.4.6",
     "cloudinary": "^2.5.1",
     "date-fns": "^4.1.0",
-    "eslint": "^8",
-    "eslint-config-next": "15.0.3",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.456.0",
     "mongodb": "^6.10.0",
@@ -32,11 +25,19 @@
     "next-auth": "^4.24.10",
     "next-themes": "^0.4.3",
     "papaparse": "^5.4.1",
-    "postcss": "^8",
     "react": "19.0.0-rc-66855b96-20241106",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "19.0.0-rc-66855b96-20241106",
+    "vercel": "^39.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.7",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "15.0.3",
+    "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5.7.2"
   }
 }
